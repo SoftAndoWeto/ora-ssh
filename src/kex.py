@@ -92,3 +92,15 @@ def encode_name_list(names: list[str]) -> bytes:
     name_list_utf8 = name_list.encode('utf-8')
     name_list_uint32 = encode_uint32(len(name_list_utf8))
     return name_list_uint32 + name_list_utf8
+
+
+def send_kexinit(s: socket.socket):
+    kexinit = build_kexinit()
+    write_packet(s, kexinit)
+
+
+def recv_kexinit(s: socket.socket) -> bytes:
+    packet = read_packet(s)
+    if packet[0] != 20:
+        raise ValueError(f"expected SSH_MSG_KEXINIT (20), got {packet[0]}")
+    return packet
