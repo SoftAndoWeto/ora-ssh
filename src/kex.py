@@ -2,6 +2,7 @@ import socket
 from dataclasses import dataclass
 import os
 
+
 @dataclass
 class SSHPacket:
     padding_length: int = 0
@@ -54,3 +55,40 @@ def calc_padding(payload: int) -> int:
 
 def padding_valid(payload: int, padding: int) -> bool:
     return (4 + 1 + payload + padding) % 8 == 0
+
+
+def build_kexinit() -> bytes:
+    kex = ["diffie-hellman-group14-sha256"]
+    host_key = ["rsa-sha2-256"]
+    encryption = ["aes128-ctr"]
+    mac = ["hmac-sha2-256"]
+    compression = ["none"]
+
+    msg_type = int(20).to_bytes(1, byteorder='big')
+    cookie = os.urandom(16)
+
+    return (msg_type +
+            cookie +
+            encode_name_list(kex) +
+            encode_name_list(host_key) +
+            encode_name_list(encryption) +
+            encode_name_list(encryption) +
+            encode_name_list(mac) +
+            encode_name_list(mac) +
+            encode_name_list(compression) +
+            encode_name_list(compression) +
+            encode_name_list([]) +
+            encode_name_list([]) +
+            b'\x00' +
+            encode_uint32(0))
+
+
+def encode_uint32(n: int) -> bytes:
+    return n.to_bytes(4, byteorder='big')
+
+
+def encode_name_list(names: list[str]) -> bytes:
+    name_list = ",".join(names)
+    name_list_utf8 = name_list.encode('utf-8')
+    name_list_uint32 = encode_uint32(len(name_list_utf8))
+    return name_list_uint32 + name_list_utf8
