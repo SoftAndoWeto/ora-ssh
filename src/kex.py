@@ -131,10 +131,35 @@ def encode_mpint(n: int) -> bytes:
     return encode_uint32(len(n_bytes)) + n_bytes
 
 
-def send_kexdh_init(s):
+def send_kexdh_init(s: socket.socket):
     """Генерирует DH-параметры и отправляет SSH_MSG_KEXDH_INIT. Возвращает (x, e) для дальнейших вычислений."""
     x = secrets.randbelow(p)
     e = pow(g, x, p)
     payload = (30).to_bytes(1, 'big') + encode_mpint(e)
     write_packet(s, payload)
     return x, e
+
+
+def recv_kexdh_reply(s: socket.socket, x):
+    packet = read_packet(s)
+    if packet[0] != 31:
+        raise ValueError(f"expected SSH_MSG_KEXDH_REPLY (31), got {packet[0]}")
+    data = packet[1:]
+    K_S, offset = decode_string(data, 0)
+    f, offset = decode_mpint(data, offset)
+    signature, offset = decode_string(data, offset)
+    K = pow(f, x, p)
+    return K, K_S, f, signature
+
+
+def decode_string(data: bytes, offset: int) -> tuple[bytes, int]:
+    """Читает SSH string (4 байта длины + данные) начиная с offset. Возвращает (value, new_offset)."""
+    length = int.from_bytes(data[offset:offset + 4], 'big')
+    value = data[offset + 4: offset + 4 + length]
+    return value, offset + 4 + length
+
+
+def decode_mpint(data: bytes, offset: int) -> tuple[int, int]:
+    """Читает SSH mpint начиная с offset, возвращает его как int и новый offset."""
+    raw, new_offset = decode_string(data, offset)
+    return int.from_bytes(raw, 'big'), new_offset
