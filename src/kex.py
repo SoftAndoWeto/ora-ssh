@@ -163,3 +163,13 @@ def decode_mpint(data: bytes, offset: int) -> tuple[int, int]:
     """Читает SSH mpint начиная с offset, возвращает его как int и новый offset."""
     raw, new_offset = decode_string(data, offset)
     return int.from_bytes(raw, 'big'), new_offset
+
+
+def send_newkeys(s: socket.socket):
+    write_packet(s, b"\x15")
+
+
+def recv_newkeys(s: socket.socket):
+    packet = read_packet(s)
+    if packet[0] != 21:
+        raise ValueError(f"expected SSH_MSG_NEWKEYS (21), got {packet[0]}")
