@@ -8,6 +8,12 @@ p = 0xFFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B
 # Генератор группы
 g = 2
 
+# Коды типов SSH-сообщений (RFC 4253)
+MSG_KEXINIT     = 20  # обмен списками алгоритмов
+MSG_NEWKEYS     = 21  # завершение key exchange, переход на шифрование
+MSG_KEXDH_INIT  = 30  # клиент отправляет e = g^x mod p
+MSG_KEXDH_REPLY = 31  # сервер отвечает f, K_S, signature
+
 
 @dataclass
 class SSHPacket:
@@ -76,7 +82,7 @@ def build_kexinit() -> bytes:
     mac = ["hmac-sha2-256"]
     compression = ["none"]
 
-    msg_type = int(20).to_bytes(1, byteorder='big')
+    msg_type = MSG_KEXINIT.to_bytes(1, byteorder='big')
     cookie = os.urandom(16)
 
     return (msg_type +
@@ -117,8 +123,8 @@ def send_kexinit(s: socket.socket):
 def recv_kexinit(s: socket.socket) -> bytes:
     """Читает SSH_MSG_KEXINIT от сервера. Если пришло что-то другое - кидает ошибку."""
     packet = read_packet(s)
-    if packet[0] != 20:
-        raise ValueError(f"expected SSH_MSG_KEXINIT (20), got {packet[0]}")
+    if packet[0] != MSG_KEXINIT:
+        raise ValueError(f"expected SSH_MSG_KEXINIT ({MSG_KEXINIT}), got {packet[0]}")
     return packet
 
 
@@ -135,15 +141,15 @@ def send_kexdh_init(s: socket.socket):
     """Генерирует DH-параметры и отправляет SSH_MSG_KEXDH_INIT. Возвращает (x, e) для дальнейших вычислений."""
     x = secrets.randbelow(p)
     e = pow(g, x, p)
-    payload = (30).to_bytes(1, 'big') + encode_mpint(e)
+    payload = MSG_KEXDH_INIT.to_bytes(1, 'big') + encode_mpint(e)
     write_packet(s, payload)
     return x, e
 
 
 def recv_kexdh_reply(s: socket.socket, x):
     packet = read_packet(s)
-    if packet[0] != 31:
-        raise ValueError(f"expected SSH_MSG_KEXDH_REPLY (31), got {packet[0]}")
+    if packet[0] != MSG_KEXDH_REPLY:
+        raise ValueError(f"expected SSH_MSG_KEXDH_REPLY ({MSG_KEXDH_REPLY}), got {packet[0]}")
     data = packet[1:]
     K_S, offset = decode_string(data, 0)
     f, offset = decode_mpint(data, offset)
@@ -166,10 +172,10 @@ def decode_mpint(data: bytes, offset: int) -> tuple[int, int]:
 
 
 def send_newkeys(s: socket.socket):
-    write_packet(s, b"\x15")
+    write_packet(s, MSG_NEWKEYS.to_bytes(1, 'big'))
 
 
 def recv_newkeys(s: socket.socket):
     packet = read_packet(s)
-    if packet[0] != 21:
-        raise ValueError(f"expected SSH_MSG_NEWKEYS (21), got {packet[0]}")
+    if packet[0] != MSG_NEWKEYS:
+        raise ValueError(f"expected SSH_MSG_NEWKEYS ({MSG_NEWKEYS}), got {packet[0]}")
